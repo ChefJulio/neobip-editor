@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeoShot Level Editor</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #111; color: #eee; font-family: monospace; display: flex; flex-direction: column; height: 100vh; overflow: hidden; user-select: none; }
+
+#toolbar { display: flex; gap: 0; background: #1a1a1a; border-bottom: 1px solid #333; flex-shrink: 0; }
+.tb-group { display: flex; gap: 3px; align-items: center; padding: 6px 10px; border-right: 1px solid #333; }
+.tb-group:last-child { border-right: none; }
+.tb-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-right: 4px; }
+
+#toolbar2 { display: flex; gap: 0; background: #1a1a1a; border-bottom: 1px solid #333; flex-shrink: 0; }
+
+#main { flex: 1; display: flex; overflow: hidden; }
+#canvas-wrap { flex: 1; overflow: auto; padding: 12px; }
+canvas { background: #000; cursor: crosshair; }
+
+#right-panel { width: 220px; background: #1a1a1a; border-left: 1px solid #333; overflow-y: auto; padding: 10px; flex-shrink: 0; }
+#right-panel h3 { font-size: 10px; margin: 12px 0 4px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+#right-panel h3:first-child { margin-top: 0; }
+
+button { background: #333; color: #eee; border: 1px solid #555; padding: 4px 8px; cursor: pointer; font-family: monospace; font-size: 11px; border-radius: 3px; white-space: nowrap; }
+button:hover { background: #444; }
+button.active { background: #c050c0; border-color: #e070e0; color: #fff; }
+button.sm { padding: 3px 6px; font-size: 10px; }
+
+select { background: #222; color: #eee; border: 1px solid #444; padding: 3px 6px; font-family: monospace; font-size: 11px; border-radius: 3px; }
+input[type="range"] { width: 80px; accent-color: #c050c0; vertical-align: middle; }
+input[type="number"] { background: #222; color: #eee; border: 1px solid #444; padding: 2px 4px; font-family: monospace; font-size: 11px; width: 40px; border-radius: 3px; }
+input[type="text"] { background: #222; color: #eee; border: 1px solid #444; padding: 2px 6px; font-family: monospace; font-size: 11px; width: 100%; border-radius: 3px; }
+textarea { background: #222; color: #eee; border: 1px solid #444; padding: 4px; font-family: monospace; font-size: 9px; width: 100%; height: 80px; resize: vertical; border-radius: 3px; }
+
+.hue-swatch { width: 18px; height: 18px; border-radius: 3px; border: 1px solid #555; display: inline-block; vertical-align: middle; }
+.stat { font-size: 10px; color: #777; margin: 2px 0; }
+.stat b { color: #bbb; }
+.row { display: flex; gap: 4px; align-items: center; margin: 3px 0; }
+</style>
+</head>
+<body>
+
+<!-- TOOLBAR ROW 1: Tools + Hue + Multiply -->
+<div id="toolbar">
+  <div class="tb-group">
+    <span class="tb-label">Tool</span>
+    <button id="btn-brick" class="active" onclick="setTool('brick')">Brick</button>
+    <button id="btn-erase" onclick="setTool('erase')">Erase</button>
+    <button id="btn-select" onclick="setTool('select')">Select</button>
+    <button id="btn-dropper" onclick="setTool('dropper')">Dropper</button>
+    <button id="btn-multiply" onclick="setTool('multiply')">Multiply</button>
+    <button id="btn-steel" onclick="setTool('steel')">Steel</button>
+    <button id="btn-poly" onclick="setTool('poly')">Polygon</button>
+  </div>
+  <div class="tb-group" style="flex-wrap:wrap;max-width:320px">
+    <span class="tb-label">Color</span>
+    <input type="range" id="hue-slider" min="0" max="1" step="0.01" value="0" oninput="onHueChange()" style="width:70px">
+    <span id="hue-val" style="font-size:10px;width:28px">0.00</span>
+    <div class="hue-swatch" id="hue-preview"></div>
+    <div style="display:flex;gap:2px;margin-left:4px" id="color-presets"></div>
+    <div style="display:flex;gap:2px;margin-left:4px" id="recent-colors"></div>
+  </div>
+  <div class="tb-group">
+    <span class="tb-label">Mult</span>
+    <select id="mult-val" onchange="setTool('multiply')" style="width:58px">
+      <option value="2">x2</option>
+      <option value="3">x3</option>
+      <option value="4">x4</option>
+      <option value="5" selected>x5</option>
+      <option value="6">x6</option>
+      <option value="7">x7</option>
+      <option value="8">x8</option>
+      <option value="9">x9</option>
+      <option value="10">x10</option>
+    </select>
+  </div>
+  <div class="tb-group">
+    <span class="tb-label">Brush</span>
+    <input type="hidden" id="brush-w" value="1">
+    <input type="hidden" id="brush-h" value="1">
+    <span id="brush-display" style="font-size:11px;min-width:32px;text-align:center">1x1</span>
+  </div>
+  <div class="tb-group">
+    <span class="tb-label">Mirror</span>
+    <button id="btn-mirX" onclick="mirrorX=!mirrorX;updateMirrorBtns()">X</button>
+    <button id="btn-mirY" onclick="mirrorY=!mirrorY;updateMirrorBtns()">Y</button>
+    <span style="font-size:9px;color:#555">line:</span>
+    <input type="number" id="mirror-x-line" value="20" style="width:42px" title="X mirror column">
+    <input type="number" id="mirror-y-line" value="24" style="width:42px" title="Y mirror row">
+  </div>
+</div>
+
+<!-- TOOLBAR ROW 2: Selection + Sized + File -->
+<div id="toolbar2">
+  <div class="tb-group" id="select-group">
+    <span class="tb-label">Selection</span>
+    <button onclick="fillSelectionWith('brick')">Fill Brick</button>
+    <button onclick="fillSelectionWith('steel')">Fill Steel</button>
+    <button onclick="fillSelectionWith('multiply')">Fill Mult</button>
+    <button onclick="fillSelectionWith('erase')">Erase</button>
+    <button id="btn-sized" onclick="sizedMode=!sizedMode;updateSizedBtn()">Sized: OFF</button>
+    <button onclick="copySelection()">Copy</button>
+    <button onclick="setTool('stamp')" id="btn-stamp">Stamp</button>
+    <button onclick="cutSelection()">Cut</button>
+    <button onclick="recolorClipboard()">Recolor</button>
+    <button onclick="handleRotate()">Rotate (R)</button>
+    <button onclick="handleFlip()">Flip (F)</button>
+    <button onclick="moveSelection(-1,0)">&#9664;</button>
+    <button onclick="moveSelection(1,0)">&#9654;</button>
+    <button onclick="moveSelection(0,-1)">&#9650;</button>
+    <button onclick="moveSelection(0,1)">&#9660;</button>
+  </div>
+  <div class="tb-group">
+    <button onclick="undo()" title="Undo (Cmd+Z)">Undo</button>
+    <button onclick="redo()" title="Redo (Cmd+Shift+Z)">Redo</button>
+  </div>
+</div>
+
+<div id="main">
+  <div id="canvas-wrap">
+    <canvas id="grid"></canvas>
+  </div>
+
+  <div id="right-panel">
+    <h3>Stats</h3>
+    <div class="stat">Bricks: <b id="stat-bricks">0</b> &nbsp; Mult: <b id="stat-mult">0</b> <span style="color:#555">/ ~50</span></div>
+    <div class="stat">Shapes: <b id="stat-shapes">0</b></div>
+
+    <h3>File</h3>
+    <div class="row">
+      <span style="font-size:10px">Name:</span>
+      <input type="text" id="level-name" value="Untitled">
+    </div>
+    <div class="row">
+      <button class="sm" onclick="copyJSON()">Copy JSON</button>
+      <button class="sm" onclick="exportJSON()">Save</button>
+      <button class="sm" onclick="document.getElementById('import-file').click()">Load</button>
+      <button class="sm" onclick="clearAll()">Clear</button>
+    </div>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importJSON(event)">
+    <div id="drop-zone" style="border:2px dashed #444;border-radius:6px;padding:8px;text-align:center;color:#555;font-size:10px;cursor:pointer;margin-top:6px" onclick="document.getElementById('import-file').click()">
+      Drop JSON here or click to browse
+    </div>
+    <textarea id="json-import" placeholder="Paste JSON here..." style="height:50px;margin-top:4px"></textarea>
+    <button class="sm" onclick="importFromPaste()" style="margin-top:4px;width:100%">Import Pasted JSON</button>
+
+    <h3>Polygon Builder</h3>
+    <div id="poly-verts-list"></div>
+    <div class="row">
+      <span style="font-size:10px">c:</span><input type="number" id="pv-col" step="1">
+      <span style="font-size:10px">r:</span><input type="number" id="pv-row" step="1">
+      <button class="sm" onclick="addPolyVertManual()">+</button>
+    </div>
+    <div class="row">
+      <select id="poly-type"><option value="brick">Brick</option><option value="steel">Steel</option><option value="multiply">Multiply</option></select>
+      <button class="sm" onclick="finishPoly()">Finish</button>
+      <button class="sm" onclick="polyVerts=[];renderPolyVerts();render()">Cancel</button>
+    </div>
+
+    <h3>Shapes (<span id="stat-shapes2">0</span>)</h3>
+    <div id="shape-list"></div>
+    <button class="sm" onclick="if(shapes.length){shapes.pop();renderShapeList();updateStats();render()}" style="margin-top:4px">Del Last Shape</button>
+
+    <h3>Sized Bricks</h3>
+    <div class="stat">Select area + Fill with Sized ON, or add manually:</div>
+    <div class="row">
+      <span style="font-size:10px">r:</span><input type="number" id="sb-row" style="width:32px">
+      <span style="font-size:10px">c:</span><input type="number" id="sb-col" style="width:32px">
+      <span style="font-size:10px">w:</span><input type="number" id="sb-w" value="2" style="width:32px">
+      <span style="font-size:10px">h:</span><input type="number" id="sb-h" value="2" style="width:32px">
+    </div>
+    <div class="row">
+      <select id="sb-type"><option value="multiply">Multiply</option><option value="brick">Brick</option><option value="steel">Steel</option></select>
+      <button class="sm" onclick="addSizedBrick()">Add</button>
+    </div>
+    <div id="sized-brick-list"></div>
+
+    <h3>JSON Output</h3>
+    <textarea id="json-output" readonly placeholder="Copy JSON or Save to export..."></textarea>
+
+  </div>
+</div>
+
+<script>
+const COLS = 40;
+const ROWS = 50;
+const CELL = 16;
+const GAP = 1;
+const STEP = CELL + GAP;
+const PLAY_AREA_ROWS = 34;
+const PADDLE_ROW = 16;
+const RULER = 20;
+
+const canvas = document.getElementById('grid');
+const ctx = canvas.getContext('2d');
+canvas.width = RULER + COLS * STEP + GAP;
+canvas.height = RULER + (ROWS + PLAY_AREA_ROWS) * STEP + GAP;
+
+let grid = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+let shapes = [];
+let sizedBricks = [];
+let sizedMode = false;
+let tool = 'brick';
+let hue = 0;
+let painting = false;
+let selection = null;
+let selStart = null;
+let polyVerts = [];
+let hoverPos = null;
+let prevTool = 'brick';
+let mirrorX = false;
+let mirrorY = false;
+let lastSizedBrick = null; // {r, c, w, h} — skip placing while cursor overlaps this
+let clipboard = null; // { w, h, cells: [[cell|null]] }
+let highlightedShape = -1;
+let undoStack = [];
+let redoStack = [];
+const MAX_UNDO = 50;
+
+function hueCSS(h) { return h < 0 ? '#e6e6e6' : `hsl(${h * 360}, 85%, 55%)`; }
+function cellColor(cell) {
+  if (!cell) return null;
+  if (cell.type === 'steel') return '#666';
+  if (cell.type === 'multiply') return hueCSS(cell.hue);
+  return hueCSS(cell.hue);
+}
+
+const toolCursors = {
+  brick: 'crosshair',
+  steel: 'grab',
+  multiply: 'cell',
+  erase: 'not-allowed',
+  select: 'default',
+  poly: 'copy',
+  dropper: 'zoom-in',
+  stamp: 'alias'
+};
+
+function setTool(t) {
+  if (t === 'dropper' && tool !== 'dropper') prevTool = tool;
+  tool = t;
+  if (t !== 'poly') polyVerts = [];
+  if (t !== 'select') { selection = null; selStart = null; }
+  canvas.style.cursor = toolCursors[t] || 'crosshair';
+  document.querySelectorAll('#toolbar .tb-group:first-child button').forEach(b => b.className = '');
+  const btn = document.getElementById('btn-' + t);
+  if (btn) btn.className = 'active';
+  document.getElementById('btn-stamp').className = t === 'stamp' ? 'active' : '';
+  render();
+}
+
+function updateSizedBtn() {
+  document.getElementById('btn-sized').textContent = sizedMode ? 'Sized: ON' : 'Sized: OFF';
+  document.getElementById('btn-sized').className = sizedMode ? 'active' : '';
+}
+
+function saveUndo() {
+  undoStack.push({
+    grid: grid.map(row => row.map(c => c ? {...c} : null)),
+    sizedBricks: sizedBricks.map(b => ({...b})),
+    shapes: shapes.map(s => ({...s, v: s.v.map(v => [...v])}))
+  });
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack = [];
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  redoStack.push({
+    grid: grid.map(row => row.map(c => c ? {...c} : null)),
+    sizedBricks: sizedBricks.map(b => ({...b})),
+    shapes: shapes.map(s => ({...s, v: s.v.map(v => [...v])}))
+  });
+  const state = undoStack.pop();
+  grid = state.grid;
+  sizedBricks = state.sizedBricks;
+  shapes = state.shapes;
+  renderSizedBrickList(); renderShapeList(); updateStats(); render();
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push({
+    grid: grid.map(row => row.map(c => c ? {...c} : null)),
+    sizedBricks: sizedBricks.map(b => ({...b})),
+    shapes: shapes.map(s => ({...s, v: s.v.map(v => [...v])}))
+  });
+  const state = redoStack.pop();
+  grid = state.grid;
+  sizedBricks = state.sizedBricks;
+  shapes = state.shapes;
+  renderSizedBrickList(); renderShapeList(); updateStats(); render();
+}
+
+function updateMirrorBtns() {
+  document.getElementById('btn-mirX').className = mirrorX ? 'active' : '';
+  document.getElementById('btn-mirY').className = mirrorY ? 'active' : '';
+  render();
+}
+
+// Modified: 2026-04-08
+function getMirrorPositions(r, c) {
+  const positions = [{r, c}];
+  const mx = parseInt(document.getElementById('mirror-x-line').value) || 20;
+  const my = parseInt(document.getElementById('mirror-y-line').value) || 20;
+  const bw = parseInt(document.getElementById('brush-w').value) || 1;
+  const bh = parseInt(document.getElementById('brush-h').value) || 1;
+  if (mirrorX) positions.push({r, c: mx * 2 - c - bw});
+  if (mirrorY) positions.push({r: my * 2 - r - bh, c});
+  if (mirrorX && mirrorY) positions.push({r: my * 2 - r - bh, c: mx * 2 - c - bw});
+  return positions.filter(p => p.r >= 0 && p.r < ROWS && p.c >= 0 && p.c < COLS);
+}
+
+function updateBrushDisplay() {
+  const w = document.getElementById('brush-w').value;
+  const h = document.getElementById('brush-h').value;
+  document.getElementById('brush-display').textContent = w + 'x' + h;
+}
+
+const presetColors = [
+  {h: 0, label: 'Red'}, {h: 0.05, label: 'Orange-Red'}, {h: 0.08, label: 'Orange'},
+  {h: 0.14, label: 'Yellow'}, {h: 0.22, label: 'Lime'}, {h: 0.33, label: 'Green'},
+  {h: 0.44, label: 'Teal'}, {h: 0.5, label: 'Cyan'}, {h: 0.55, label: 'Sky'},
+  {h: 0.65, label: 'Blue'}, {h: 0.75, label: 'Purple'}, {h: 0.83, label: 'Magenta'},
+  {h: 0.95, label: 'Pink'},
+  {h: -1, label: 'White'}
+];
+let recentHues = [];
+
+function buildColorPresets() {
+  const div = document.getElementById('color-presets');
+  div.innerHTML = '';
+  for (const p of presetColors) {
+    const sw = document.createElement('div');
+    sw.className = 'hue-swatch';
+    sw.style.width = '14px'; sw.style.height = '14px'; sw.style.cursor = 'pointer';
+    sw.style.display = 'inline-block'; sw.style.margin = '0';
+    sw.style.background = p.h < 0 ? '#e6e6e6' : hueCSS(p.h);
+    sw.title = p.label;
+    sw.onclick = () => { pickHue(p.h); };
+    div.appendChild(sw);
+  }
+}
+
+function pickHue(h) {
+  hue = h;
+  if (h >= 0) {
+    document.getElementById('hue-slider').value = h;
+  }
+  document.getElementById('hue-val').textContent = h < 0 ? 'white' : h.toFixed(2);
+  document.getElementById('hue-preview').style.background = h < 0 ? '#e6e6e6' : hueCSS(h);
+  addRecentHue(h);
+}
+
+function addRecentHue(h) {
+  recentHues = recentHues.filter(r => Math.abs(r - h) > 0.005);
+  recentHues.unshift(h);
+  if (recentHues.length > 8) recentHues.pop();
+  buildRecentColors();
+}
+
+function buildRecentColors() {
+  const div = document.getElementById('recent-colors');
+  if (!recentHues.length) { div.innerHTML = ''; return; }
+  div.innerHTML = '';
+  const label = document.createElement('span');
+  label.style.fontSize = '8px'; label.style.color = '#444'; label.style.marginRight = '2px';
+  label.textContent = '|';
+  div.appendChild(label);
+  for (const h of recentHues) {
+    const sw = document.createElement('div');
+    sw.className = 'hue-swatch';
+    sw.style.width = '14px'; sw.style.height = '14px'; sw.style.cursor = 'pointer';
+    sw.style.display = 'inline-block'; sw.style.margin = '0';
+    sw.style.background = hueCSS(h);
+    sw.onclick = () => pickHue(h);
+    div.appendChild(sw);
+  }
+}
+
+function onHueChange() {
+  hue = parseFloat(document.getElementById('hue-slider').value);
+  document.getElementById('hue-val').textContent = hue.toFixed(2);
+  document.getElementById('hue-preview').style.background = hue < 0 ? '#e6e6e6' : hueCSS(hue);
+}
+onHueChange();
+buildColorPresets();
+
+function makeCell() {
+  const mult = parseInt(document.getElementById('mult-val').value) || 5;
+  if (tool === 'brick') return { type: 'brick', hue };
+  if (tool === 'steel') return { type: 'steel' };
+  if (tool === 'multiply') return { type: 'multiply', hue: hue, count: mult };
+  return null;
+}
+
+function gridPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const c = Math.floor((e.clientX - rect.left - RULER) / STEP);
+  const r = Math.floor((e.clientY - rect.top - RULER) / STEP);
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return null;
+  return {r, c};
+}
+
+function gridPosFloat(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left - RULER) / STEP;
+  const y = (e.clientY - rect.top - RULER) / STEP;
+  if (y > ROWS) return null;
+  return { c: Math.round(x), r: Math.round(y) };
+}
+
+function paintCellAt(pos) {
+  if (!pos) return;
+  const bw = parseInt(document.getElementById('brush-w').value) || 1;
+  const bh = parseInt(document.getElementById('brush-h').value) || 1;
+
+  if (sizedMode && (bw > 1 || bh > 1) && tool !== 'erase' && (tool === 'brick' || tool === 'steel' || tool === 'multiply')) {
+    if (lastSizedBrick && painting &&
+        pos.c < lastSizedBrick.c + lastSizedBrick.w && pos.c + bw > lastSizedBrick.c &&
+        pos.r < lastSizedBrick.r + lastSizedBrick.h && pos.r + bh > lastSizedBrick.r) {
+      return;
+    }
+    const mult = parseInt(document.getElementById('mult-val').value) || 5;
+    clearGridUnder(pos.r, pos.c, bw, bh);
+    const brick = { r: pos.r, c: pos.c, w: bw, h: bh, type: tool, hue: hue, count: tool === 'multiply' ? mult : 0 };
+    sizedBricks.push(brick);
+    lastSizedBrick = brick;
+    renderSizedBrickList();
+    return;
+  }
+
+  sizedBricks = sizedBricks.filter(b =>
+    b.c >= pos.c + bw || b.c + b.w <= pos.c || b.r >= pos.r + bh || b.r + b.h <= pos.r
+  );
+  for (let dr = 0; dr < bh; dr++) {
+    for (let dc = 0; dc < bw; dc++) {
+      const r = pos.r + dr, c = pos.c + dc;
+      if (r >= ROWS || c >= COLS) continue;
+      if (tool === 'erase') grid[r][c] = null;
+      else if (tool === 'brick' || tool === 'steel' || tool === 'multiply') grid[r][c] = makeCell();
+    }
+  }
+}
+
+function paintCell(pos) {
+  if (!pos) return;
+  if (mirrorX || mirrorY) {
+    for (const mp of getMirrorPositions(pos.r, pos.c)) paintCellAt(mp);
+  } else {
+    paintCellAt(pos);
+  }
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  const pos = gridPos(e);
+  if (tool === 'poly') {
+    const fp = gridPosFloat(e);
+    if (!fp) return;
+    polyVerts.push([fp.c, fp.r]);
+    if (polyVerts.length >= 4) finishPoly();
+    else { renderPolyVerts(); render(); }
+    return;
+  }
+  if (tool === 'select') {
+    if (pos) { selStart = pos; selection = {r1: pos.r, c1: pos.c, r2: pos.r, c2: pos.c}; render(); }
+    return;
+  }
+  if (tool === 'dropper') {
+    if (pos) {
+      const cell = grid[pos.r][pos.c];
+      if (cell && cell.type === 'brick') {
+        pickHue(cell.hue);
+        setTool(prevTool);
+      } else if (cell && cell.type === 'multiply') {
+        pickHue(cell.hue);
+        document.getElementById('mult-val').value = cell.count;
+        setTool('multiply');
+      } else if (cell && cell.type === 'steel') {
+        setTool('steel');
+      } else {
+        setTool(prevTool);
+      }
+    }
+    return;
+  }
+  if (tool === 'stamp') {
+    saveUndo();
+    stampAt(pos);
+    updateStats(); render();
+    return;
+  }
+  saveUndo();
+  painting = true;
+  if (tool === 'brick') addRecentHue(hue);
+  paintCell(pos);
+  updateStats(); render();
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  hoverPos = gridPos(e);
+  if (tool === 'select' && selStart) {
+    const pos = hoverPos;
+    if (pos) {
+      selection = { r1: Math.min(selStart.r, pos.r), c1: Math.min(selStart.c, pos.c),
+                     r2: Math.max(selStart.r, pos.r), c2: Math.max(selStart.c, pos.c) };
+    }
+    render();
+    return;
+  }
+  if (painting) { paintCell(hoverPos); updateStats(); }
+  render();
+});
+
+canvas.addEventListener('mouseup', () => { painting = false; selStart = null; lastSizedBrick = null; });
+canvas.addEventListener('mouseleave', () => { painting = false; hoverPos = null; render(); });
+
+document.addEventListener('keydown', (e) => {
+  const keys = {1:'brick',2:'erase',3:'select',4:'dropper',5:'multiply',6:'steel',7:'poly'};
+  if (keys[e.key]) setTool(keys[e.key]);
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selection) { fillSelectionWith('erase'); e.preventDefault(); }
+  if (e.key === 'Escape') { selection = null; selStart = null; polyVerts = []; renderPolyVerts(); render(); }
+  if (selection && e.key === 'ArrowLeft')  { moveSelection(-1, 0); e.preventDefault(); }
+  if (selection && e.key === 'ArrowRight') { moveSelection(1, 0);  e.preventDefault(); }
+  if (selection && e.key === 'ArrowUp')    { moveSelection(0, -1); e.preventDefault(); }
+  if (selection && e.key === 'ArrowDown')  { moveSelection(0, 1);  e.preventDefault(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { undo(); e.preventDefault(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) { redo(); e.preventDefault(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'y') { redo(); e.preventDefault(); }
+  if (e.key === 'Tab') { sizedMode = !sizedMode; updateSizedBtn(); e.preventDefault(); }
+  if (e.key === 'w' || e.key === 'W') { document.getElementById('brush-h').value = Math.min(ROWS, (parseInt(document.getElementById('brush-h').value)||1) + 1); }
+  if (e.key === 's' || e.key === 'S') { document.getElementById('brush-h').value = Math.max(1, (parseInt(document.getElementById('brush-h').value)||1) - 1); }
+  if (e.key === 'd' || e.key === 'D') { document.getElementById('brush-w').value = Math.min(COLS, (parseInt(document.getElementById('brush-w').value)||1) + 1); }
+  if (e.key === 'a' || e.key === 'A') { document.getElementById('brush-w').value = Math.max(1, (parseInt(document.getElementById('brush-w').value)||1) - 1); }
+  if ('wasdWASD'.includes(e.key)) { updateBrushDisplay(); render(); }
+  if (e.key === 'q' || e.key === 'Q') { const sel = document.getElementById('mult-val'); sel.selectedIndex = Math.max(0, sel.selectedIndex - 1); }
+  if (e.key === 'e' || e.key === 'E') { const sel = document.getElementById('mult-val'); sel.selectedIndex = Math.min(sel.options.length - 1, sel.selectedIndex + 1); }
+  if (e.key === 'r' || e.key === 'R') { handleRotate(); e.preventDefault(); }
+  if (e.key === 'f' || e.key === 'F') { handleFlip(); e.preventDefault(); }
+});
+
+
+
+// --- Copy / Stamp ---
+function copySelection() {
+  if (!selection) return;
+  const w = selection.c2 - selection.c1 + 1;
+  const h = selection.r2 - selection.r1 + 1;
+  const cells = [];
+  for (let dr = 0; dr < h; dr++) {
+    const row = [];
+    for (let dc = 0; dc < w; dc++) {
+      const cell = grid[selection.r1 + dr]?.[selection.c1 + dc];
+      row.push(cell ? {...cell} : null);
+    }
+    cells.push(row);
+  }
+  clipboard = { w, h, cells };
+  setTool('stamp');
+}
+
+function recolorClipboard() {
+  // If selection active, recolor bricks in-place on the grid
+  if (selection) {
+    saveUndo();
+    for (let r = selection.r1; r <= selection.r2; r++)
+      for (let c = selection.c1; c <= selection.c2; c++)
+        if (grid[r][c] && grid[r][c].type !== 'steel') grid[r][c].hue = hue;
+    // Also recolor sized bricks overlapping the selection
+    for (const b of sizedBricks) {
+      if (b.type === 'steel') continue;
+      if (b.c + b.w > selection.c1 && b.c <= selection.c2 && b.r + b.h > selection.r1 && b.r <= selection.r2)
+        b.hue = hue;
+    }
+    updateStats(); render();
+    return;
+  }
+  if (!clipboard) return;
+  // Set all clipboard bricks to current hue (skip white/steel)
+  for (const row of clipboard.cells) {
+    for (const cell of row) {
+      if (!cell || cell.type === 'steel') continue;
+      cell.hue = hue;
+    }
+  }
+  render();
+}
+
+function flipClipboard() {
+  if (!clipboard) return;
+  for (const row of clipboard.cells) row.reverse();
+  render();
+}
+
+function rotateClipboard() {
+  if (!clipboard) return;
+  const oldW = clipboard.w, oldH = clipboard.h;
+  const newCells = [];
+  for (let c = 0; c < oldW; c++) {
+    const row = [];
+    for (let r = oldH - 1; r >= 0; r--) {
+      row.push(clipboard.cells[r][c]);
+    }
+    newCells.push(row);
+  }
+  clipboard = { w: oldH, h: oldW, cells: newCells };
+  render();
+}
+
+// Modified: 2026-04-08
+function rotateSelection() {
+  if (!selection) return;
+  saveUndo();
+  const r1 = selection.r1, c1 = selection.c1;
+  const w = selection.c2 - c1 + 1, h = selection.r2 - r1 + 1;
+  const cells = [];
+  for (let dr = 0; dr < h; dr++) {
+    const row = [];
+    for (let dc = 0; dc < w; dc++) {
+      row.push(grid[r1 + dr]?.[c1 + dc] ? {...grid[r1 + dr][c1 + dc]} : null);
+    }
+    cells.push(row);
+  }
+  // Rotate 90° CW: new[c][h-1-r] = old[r][c]
+  const newCells = [];
+  for (let c = 0; c < w; c++) {
+    const row = [];
+    for (let r = h - 1; r >= 0; r--) row.push(cells[r][c]);
+    newCells.push(row);
+  }
+  // Clear old area
+  for (let dr = 0; dr < h; dr++)
+    for (let dc = 0; dc < w; dc++)
+      if (r1 + dr < ROWS && c1 + dc < COLS) grid[r1 + dr][c1 + dc] = null;
+  // Write rotated (new dims: w rows, h cols)
+  for (let dr = 0; dr < w; dr++)
+    for (let dc = 0; dc < h; dc++)
+      if (r1 + dr < ROWS && c1 + dc < COLS) grid[r1 + dr][c1 + dc] = newCells[dr][dc];
+  selection = { r1, c1, r2: r1 + w - 1, c2: c1 + h - 1 };
+  updateStats(); render();
+}
+
+// Modified: 2026-04-08
+function flipSelection() {
+  if (!selection) return;
+  saveUndo();
+  const r1 = selection.r1, c1 = selection.c1;
+  const w = selection.c2 - c1 + 1, h = selection.r2 - r1 + 1;
+  for (let dr = 0; dr < h; dr++) {
+    for (let dc = 0; dc < Math.floor(w / 2); dc++) {
+      const left = grid[r1 + dr][c1 + dc];
+      const right = grid[r1 + dr][c1 + w - 1 - dc];
+      grid[r1 + dr][c1 + dc] = right;
+      grid[r1 + dr][c1 + w - 1 - dc] = left;
+    }
+  }
+  updateStats(); render();
+}
+
+// Modified: 2026-04-08
+function handleRotate() {
+  if (tool === 'stamp' && clipboard) rotateClipboard();
+  else if (selection) rotateSelection();
+}
+function handleFlip() {
+  if (tool === 'stamp' && clipboard) flipClipboard();
+  else if (selection) flipSelection();
+}
+
+function stampAt(pos) {
+  if (!pos || !clipboard) return;
+  for (let dr = 0; dr < clipboard.h; dr++) {
+    for (let dc = 0; dc < clipboard.w; dc++) {
+      const r = pos.r + dr, c = pos.c + dc;
+      if (r >= ROWS || c >= COLS) continue;
+      const cell = clipboard.cells[dr][dc];
+      if (cell) {
+        grid[r][c] = {...cell};
+        sizedBricks = sizedBricks.filter(b => c < b.c || c >= b.c + b.w || r < b.r || r >= b.r + b.h);
+      }
+    }
+  }
+}
+
+function cutSelection() {
+  if (!selection) return;
+  saveUndo();
+  const sel = {...selection};
+  copySelection();
+  // Clear the source area
+  for (let r = sel.r1; r <= sel.r2; r++)
+    for (let c = sel.c1; c <= sel.c2; c++)
+      grid[r][c] = null;
+  sizedBricks = sizedBricks.filter(b =>
+    b.c > sel.c2 || b.c + b.w - 1 < sel.c1 ||
+    b.r > sel.r2 || b.r + b.h - 1 < sel.r1
+  );
+  updateStats(); render();
+}
+
+function moveSelection(dc, dr) {
+  if (!selection) return;
+  saveUndo();
+  const w = selection.c2 - selection.c1 + 1;
+  const h = selection.r2 - selection.r1 + 1;
+  const nr1 = selection.r1 + dr, nc1 = selection.c1 + dc;
+  const nr2 = nr1 + h - 1, nc2 = nc1 + w - 1;
+  if (nc1 < 0 || nc2 >= COLS || nr1 < 0 || nr2 >= ROWS) return;
+
+  // Copy cells out
+  const cells = [];
+  for (let r = 0; r < h; r++) {
+    const row = [];
+    for (let c = 0; c < w; c++) {
+      const cell = grid[selection.r1 + r]?.[selection.c1 + c];
+      row.push(cell ? {...cell} : null);
+    }
+    cells.push(row);
+  }
+
+  // Clear source
+  for (let r = selection.r1; r <= selection.r2; r++)
+    for (let c = selection.c1; c <= selection.c2; c++)
+      grid[r][c] = null;
+
+  // Paste at new position
+  for (let r = 0; r < h; r++)
+    for (let c = 0; c < w; c++) {
+      const cell = cells[r][c];
+      if (cell) grid[nr1 + r][nc1 + c] = cell;
+    }
+
+  // Move sized bricks that were inside selection
+  for (const b of sizedBricks) {
+    if (b.c >= selection.c1 && b.c + b.w - 1 <= selection.c2 &&
+        b.r >= selection.r1 && b.r + b.h - 1 <= selection.r2) {
+      b.r += dr;
+      b.c += dc;
+    }
+  }
+
+  // Update selection bounds
+  selection = { r1: nr1, c1: nc1, r2: nr2, c2: nc2 };
+  renderSizedBrickList(); updateStats(); render();
+}
+
+// --- Selection ---
+function fillSelectionWith(type) {
+  if (!selection) return;
+  saveUndo();
+  const mult = parseInt(document.getElementById('mult-val').value) || 5;
+  const w = selection.c2 - selection.c1 + 1;
+  const h = selection.r2 - selection.r1 + 1;
+
+  if (type === 'erase') {
+    sizedBricks = sizedBricks.filter(b => b.c > selection.c2 || b.c + b.w - 1 < selection.c1 || b.r > selection.r2 || b.r + b.h - 1 < selection.r1);
+  }
+
+  if (sizedMode && type !== 'erase' && (w > 1 || h > 1)) {
+    clearGridUnder(selection.r1, selection.c1, w, h);
+    sizedBricks.push({ r: selection.r1, c: selection.c1, w, h, type, hue: hue, count: type === 'multiply' ? mult : 0 });
+    renderSizedBrickList(); updateStats(); render();
+    return;
+  }
+
+  let cell = null;
+  if (type === 'brick') cell = { type: 'brick', hue };
+  else if (type === 'steel') cell = { type: 'steel' };
+  else if (type === 'multiply') cell = { type: 'multiply', hue: hue, count: mult };
+  for (let r = selection.r1; r <= selection.r2; r++)
+    for (let c = selection.c1; c <= selection.c2; c++)
+      grid[r][c] = cell ? {...cell} : null;
+  updateStats(); render();
+}
+
+// --- Polygon ---
+function addPolyVertManual() {
+  const c = parseFloat(document.getElementById('pv-col').value);
+  const r = parseFloat(document.getElementById('pv-row').value);
+  if (isNaN(c) || isNaN(r)) return;
+  polyVerts.push([c, r]);
+  if (polyVerts.length >= 4) finishPoly();
+  else { renderPolyVerts(); render(); }
+  document.getElementById('pv-col').value = '';
+  document.getElementById('pv-row').value = '';
+}
+
+function removePolyVert(i) { polyVerts.splice(i, 1); renderPolyVerts(); render(); }
+
+function renderPolyVerts() {
+  const div = document.getElementById('poly-verts-list');
+  if (!polyVerts.length) { div.innerHTML = '<div class="stat" style="color:#444">No vertices</div>'; return; }
+  div.innerHTML = polyVerts.map((v, i) => `<div class="stat">${i+1}. (${v[0]}, ${v[1]}) <span style="color:#f55;cursor:pointer" onclick="removePolyVert(${i})">x</span></div>`).join('');
+}
+
+function finishPoly() {
+  console.log('[finishPoly] verts:', polyVerts.length, polyVerts);
+  if (polyVerts.length < 3) { console.log('[finishPoly] need 3+ verts'); return; }
+  saveUndo();
+  const polyType = document.getElementById('poly-type').value;
+  const mult = parseInt(document.getElementById('mult-val').value) || 5;
+  shapes.push({ v: polyVerts.slice(), hue: polyType === 'steel' ? undefined : polyType === 'multiply' ? 0.83 : hue, steel: polyType === 'steel' || undefined, multiply: polyType === 'multiply' ? mult : undefined });
+  polyVerts = [];
+  renderPolyVerts(); renderShapeList(); updateStats(); render();
+}
+
+function deleteShape(i) { saveUndo(); shapes.splice(i, 1); renderShapeList(); updateStats(); render(); }
+
+function renderShapeList() {
+  const div = document.getElementById('shape-list');
+  if (!shapes.length) { div.innerHTML = '<div class="stat" style="color:#444">None</div>'; return; }
+  div.innerHTML = shapes.map((s, i) => {
+    const type = s.steel ? 'steel' : s.multiply ? `x${s.multiply}` : `hue ${(s.hue||0).toFixed(2)}`;
+    const verts = s.v.map(v => `(${v[0]},${v[1]})`).join(' ');
+    return `<div class="stat" onmouseenter="highlightedShape=${i};render()" onmouseleave="highlightedShape=-1;render()" style="cursor:default">${i+1}. ${s.v.length===3?'tri':'quad'} [${type}] <span style="color:#f55;cursor:pointer" onclick="deleteShape(${i})">del</span><br><span style="color:#555;font-size:9px">${verts}</span></div>`;
+  }).join('');
+}
+
+// --- Sized Bricks ---
+function clearGridUnder(r, c, w, h) {
+  for (let dr = 0; dr < h; dr++)
+    for (let dc = 0; dc < w; dc++)
+      if (r+dr < ROWS && c+dc < COLS) grid[r+dr][c+dc] = null;
+  // Remove any sized brick that overlaps this area
+  sizedBricks = sizedBricks.filter(b =>
+    b.c >= c + w || b.c + b.w <= c || b.r >= r + h || b.r + b.h <= r
+  );
+}
+
+function addSizedBrick() {
+  const r = parseInt(document.getElementById('sb-row').value);
+  const c = parseInt(document.getElementById('sb-col').value);
+  const w = parseInt(document.getElementById('sb-w').value) || 2;
+  const h = parseInt(document.getElementById('sb-h').value) || 2;
+  const type = document.getElementById('sb-type').value;
+  if (isNaN(r) || isNaN(c)) return;
+  saveUndo();
+  const mult = parseInt(document.getElementById('mult-val').value) || 5;
+  clearGridUnder(r, c, w, h);
+  sizedBricks.push({ r, c, w, h, type, hue: hue, count: type === 'multiply' ? mult : 0 });
+  renderSizedBrickList(); updateStats(); render();
+}
+
+function deleteSizedBrick(i) { sizedBricks.splice(i, 1); renderSizedBrickList(); updateStats(); render(); }
+
+function renderSizedBrickList() {
+  const div = document.getElementById('sized-brick-list');
+  if (!sizedBricks.length) { div.innerHTML = '<div class="stat" style="color:#444">None</div>'; return; }
+  div.innerHTML = sizedBricks.map((b, i) => {
+    let label = `${b.type} ${b.w}x${b.h} at (${b.c},${b.r})`;
+    if (b.count) label += ` x${b.count}`;
+    return `<div class="stat">${i+1}. ${label} <span style="color:#f55;cursor:pointer" onclick="deleteSizedBrick(${i})">del</span></div>`;
+  }).join('');
+}
+
+// --- Render ---
+function render() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Rulers
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(0, 0, canvas.width, RULER);
+  ctx.fillRect(0, 0, RULER, canvas.height);
+  ctx.font = '8px monospace'; ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  for (let c = 0; c < COLS; c++) { if (c % 4 === 0) { ctx.fillStyle = '#888'; ctx.fillText(c, RULER + c * STEP + STEP/2, RULER/2); }}
+  ctx.textAlign = 'right';
+  for (let r = 0; r < ROWS; r++) { if (r % 4 === 0) { ctx.fillStyle = '#888'; ctx.fillText(r, RULER - 4, RULER + r * STEP + STEP/2); }}
+
+  ctx.save();
+  ctx.translate(RULER, RULER);
+
+  // Grid cells
+  ctx.fillStyle = '#151515';
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) ctx.fillRect(c*STEP+GAP, r*STEP+GAP, CELL, CELL);
+
+  // Grid lines every 4
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  for (let c = 4; c < COLS; c += 4) ctx.fillRect(c*STEP, 0, GAP, ROWS*STEP);
+  for (let r = 4; r < ROWS; r += 4) ctx.fillRect(0, r*STEP, COLS*STEP, GAP);
+
+  // Mirror lines
+  if (mirrorX) {
+    const mx = parseInt(document.getElementById('mirror-x-line').value) || 20;
+    ctx.strokeStyle = 'rgba(0,200,255,0.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 3]);
+    ctx.beginPath();
+    ctx.moveTo(mx * STEP, 0);
+    ctx.lineTo(mx * STEP, ROWS * STEP);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if (mirrorY) {
+    const my = parseInt(document.getElementById('mirror-y-line').value) || 20;
+    ctx.strokeStyle = 'rgba(255,100,200,0.4)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 3]);
+    ctx.beginPath();
+    ctx.moveTo(0, my * STEP);
+    ctx.lineTo(COLS * STEP, my * STEP);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Margin guides
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.setLineDash([3,3]);
+  ctx.strokeRect(4*STEP, 4*STEP, (COLS-8)*STEP, (ROWS-4)*STEP);
+  ctx.setLineDash([]);
+
+  // Bricks
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    const cell = grid[r][c]; if (!cell) continue;
+    ctx.fillStyle = cellColor(cell);
+    ctx.fillRect(c*STEP+GAP, r*STEP+GAP, CELL, CELL);
+    if (cell.type === 'multiply') { ctx.fillStyle='#fff'; ctx.font='bold 8px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('x'+cell.count, c*STEP+GAP+CELL/2, r*STEP+GAP+CELL/2); }
+    if (cell.type === 'steel') { ctx.strokeStyle='#999'; ctx.lineWidth=1; ctx.strokeRect(c*STEP+GAP+.5, r*STEP+GAP+.5, CELL-1, CELL-1); }
+  }
+
+  // Sized bricks
+  for (const b of sizedBricks) {
+    const x=b.c*STEP+GAP, y=b.r*STEP+GAP, w=b.w*STEP-GAP, h=b.h*STEP-GAP;
+    ctx.fillStyle = b.type==='steel'?'#666':hueCSS(b.hue);
+    ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.strokeRect(x+.5,y+.5,w-1,h-1);
+    if (b.type!=='brick') { ctx.fillStyle='#fff'; ctx.font='bold 10px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(b.type==='steel'?'S':'x'+b.count, x+w/2, y+h/2); }
+  }
+
+  // Shapes
+  for (let si = 0; si < shapes.length; si++) {
+    const s = shapes[si];
+    if (s.v.length < 3) continue;
+    const hl = si === highlightedShape;
+    ctx.beginPath(); ctx.moveTo(s.v[0][0]*STEP, s.v[0][1]*STEP);
+    for (let i=1;i<s.v.length;i++) ctx.lineTo(s.v[i][0]*STEP, s.v[i][1]*STEP);
+    ctx.closePath();
+    if (hl) {
+      ctx.fillStyle = 'rgba(255,80,80,0.4)';
+      ctx.fill();
+      ctx.strokeStyle = '#ff4444';
+      ctx.lineWidth = 3;
+    } else {
+      ctx.fillStyle = s.steel?'rgba(100,100,100,0.6)':`hsla(${(s.hue||.5)*360},80%,55%,0.6)`;
+      ctx.fill();
+      ctx.strokeStyle = s.steel?'#aaa':`hsl(${(s.hue||.5)*360},80%,75%)`;
+      ctx.lineWidth = 2;
+    }
+    ctx.stroke();
+    for (const v of s.v) { ctx.beginPath(); ctx.arc(v[0]*STEP, v[1]*STEP, 3, 0, Math.PI*2); ctx.fillStyle = hl ? '#ff4444' : '#fff'; ctx.fill(); }
+  }
+
+  // Poly in progress
+  if (polyVerts.length) {
+    ctx.beginPath(); ctx.moveTo(polyVerts[0][0]*STEP, polyVerts[0][1]*STEP);
+    for (let i=1;i<polyVerts.length;i++) ctx.lineTo(polyVerts[i][0]*STEP, polyVerts[i][1]*STEP);
+    ctx.strokeStyle='#ff0'; ctx.lineWidth=2; ctx.stroke();
+    for (const v of polyVerts) { ctx.beginPath(); ctx.arc(v[0]*STEP, v[1]*STEP, 4, 0, Math.PI*2); ctx.fillStyle='#ff0'; ctx.fill(); }
+  }
+
+  // Selection
+  if (selection) {
+    const x=selection.c1*STEP, y=selection.r1*STEP;
+    const w=(selection.c2-selection.c1+1)*STEP+GAP, h=(selection.r2-selection.r1+1)*STEP+GAP;
+    ctx.strokeStyle='#0af'; ctx.lineWidth=2; ctx.setLineDash([4,4]); ctx.strokeRect(x,y,w,h); ctx.setLineDash([]);
+    // Size label
+    ctx.fillStyle='#0af'; ctx.font='9px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(`${selection.c2-selection.c1+1}x${selection.r2-selection.r1+1}`, x+2, y+h+2);
+  }
+
+  // Play area
+  const playY = ROWS*STEP+GAP, gridW = COLS*STEP+GAP;
+  ctx.strokeStyle='#333'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(0,playY); ctx.lineTo(gridW,playY); ctx.stroke();
+  ctx.fillStyle='#0a0a0a'; ctx.fillRect(0, playY, gridW, PLAY_AREA_ROWS*STEP);
+  const wallW=1.3*STEP;
+  ctx.fillStyle='#181818'; ctx.fillRect(0,playY,wallW,PLAY_AREA_ROWS*STEP); ctx.fillRect(gridW-wallW,playY,wallW,PLAY_AREA_ROWS*STEP);
+  const paddleW=9.7*STEP, paddleH=1.5*STEP, paddleX=(gridW-paddleW)/2, paddleY=playY+PADDLE_ROW*STEP-paddleH/2;
+  ctx.fillStyle='#e04020'; ctx.beginPath(); ctx.roundRect(paddleX,paddleY,paddleW,paddleH,4); ctx.fill();
+  const ballR=.54*STEP, ballX=paddleX+paddleW/2, ballY=paddleY-ballR-2;
+  ctx.beginPath(); ctx.arc(ballX,ballY,ballR,0,Math.PI*2); ctx.fillStyle='#ccc'; ctx.fill();
+
+  // Brush / stamp hover preview
+  if (hoverPos && tool !== 'select' && tool !== 'poly') {
+    if (tool === 'stamp' && clipboard) {
+      // Show clipboard preview
+      ctx.globalAlpha = 0.4;
+      for (let dr = 0; dr < clipboard.h; dr++) {
+        for (let dc = 0; dc < clipboard.w; dc++) {
+          const cell = clipboard.cells[dr][dc];
+          if (!cell) continue;
+          const x = (hoverPos.c + dc) * STEP + GAP;
+          const y = (hoverPos.r + dr) * STEP + GAP;
+          ctx.fillStyle = cellColor(cell);
+          ctx.fillRect(x, y, CELL, CELL);
+        }
+      }
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = 'rgba(0,255,170,0.6)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.strokeRect(hoverPos.c * STEP + GAP, hoverPos.r * STEP + GAP, clipboard.w * STEP - GAP, clipboard.h * STEP - GAP);
+      ctx.setLineDash([]);
+    } else {
+      const bw = parseInt(document.getElementById('brush-w').value) || 1;
+      const bh = parseInt(document.getElementById('brush-h').value) || 1;
+      const positions = (mirrorX || mirrorY) ? getMirrorPositions(hoverPos.r, hoverPos.c) : [hoverPos];
+      for (const mp of positions) {
+        ctx.strokeStyle = tool === 'erase' ? 'rgba(255,80,80,0.6)' : 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(mp.c * STEP + GAP, mp.r * STEP + GAP, bw * STEP - GAP, bh * STEP - GAP);
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
+// --- Stats ---
+function updateStats() {
+  let bricks=0, mult=0;
+  const occupied = new Set();
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
+    const cell=grid[r][c];
+    if(cell){ bricks++; occupied.add(r+','+c); if(cell.type==='multiply')mult+=cell.count; }
+  }
+  for (const b of sizedBricks) {
+    let count = 0;
+    for (let dr=0;dr<b.h;dr++) for (let dc=0;dc<b.w;dc++) {
+      const key = (b.r+dr)+','+(b.c+dc);
+      if (!occupied.has(key)) { count++; occupied.add(key); }
+    }
+    bricks += count;
+    if(b.type==='multiply') mult+=b.count;
+  }
+  document.getElementById('stat-bricks').textContent = bricks;
+  document.getElementById('stat-mult').textContent = mult;
+  document.getElementById('stat-shapes').textContent = shapes.length;
+  document.getElementById('stat-shapes2').textContent = shapes.length;
+  renderShapeList();
+}
+
+// --- JSON ---
+function buildJSON() {
+  const name = document.getElementById('level-name').value || 'Untitled';
+  const palette = {}; const cellToKey = new Map(); let keyIdx = 0;
+  const keyChars = 'abcdefghijklmnopqrstuvwxyz';
+  function cellSig(cell) { if(cell.type==='steel')return'steel'; if(cell.type==='multiply')return`mult_${cell.count}_${cell.hue.toFixed(2)}`; return`brick_${cell.hue.toFixed(2)}`; }
+  for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
+    const cell=grid[r][c]; if(!cell)continue; const sig=cellSig(cell);
+    if(!cellToKey.has(sig)) {
+      let k; if(cell.type==='steel')k='S'; else if(cell.type==='multiply')k='M'+cellToKey.size; else k=keyChars[keyIdx++]||('k'+keyIdx++);
+      cellToKey.set(sig,k);
+      const entry={}; if(cell.type==='steel')entry.steel=true; else if(cell.type==='multiply'){entry.hue=parseFloat(cell.hue.toFixed(2));entry.multiply=cell.count;} else entry.hue=parseFloat(cell.hue.toFixed(2));
+      palette[k]=entry;
+    }
+  }
+  const bricks=[];
+  for (let r=0;r<ROWS;r++) { let c=0; while(c<COLS) { const cell=grid[r][c]; if(!cell){c++;continue;} const sig=cellSig(cell); const k=cellToKey.get(sig); let len=1; while(c+len<COLS&&grid[r][c+len]&&cellSig(grid[r][c+len])===sig)len++; const entry={r,c,k}; if(len>1)entry.len=len; bricks.push(entry); c+=len; } }
+  for (const b of sizedBricks) {
+    let k; if(b.type==='steel'){if(!palette['S'])palette['S']={steel:true};k='S';} else if(b.type==='multiply'){const sig=`mult_${b.count}_${(b.hue||.83).toFixed(2)}`;if(!cellToKey.has(sig)){const mk='M'+cellToKey.size;cellToKey.set(sig,mk);palette[mk]={hue:parseFloat((b.hue||.83).toFixed(2)),multiply:b.count};}k=cellToKey.get(sig);} else{const sig=`brick_${(b.hue||0).toFixed(2)}`;if(!cellToKey.has(sig)){const bk=keyChars[keyIdx++]||('k'+keyIdx++);cellToKey.set(sig,bk);palette[bk]={hue:parseFloat((b.hue||0).toFixed(2))};}k=cellToKey.get(sig);}
+    bricks.push({r:b.r,c:b.c,w:b.w,h:b.h,k});
+  }
+  const shapesOut=shapes.map(s=>{const o={v:s.v};if(s.steel)o.steel=true;else o.hue=parseFloat((s.hue||.5).toFixed(2));if(s.multiply)o.multiply=s.multiply;return o;});
+  return JSON.stringify({name,palette,bricks,shapes:shapesOut},null,2);
+}
+
+function exportJSON() { const j=buildJSON(); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([j],{type:'application/json'})); a.download=(document.getElementById('level-name').value||'level').replace(/\s+/g,'_').toLowerCase()+'.json'; a.click(); document.getElementById('json-output').value=j; }
+function copyJSON() { const j=buildJSON(); navigator.clipboard.writeText(j); document.getElementById('json-output').value=j; }
+function importJSON(event) { const f=event.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=e=>{try{loadLevel(JSON.parse(e.target.result));}catch(err){alert('Parse error: '+err.message);}}; r.readAsText(f); event.target.value=''; }
+
+function loadLevel(data) {
+  grid=Array.from({length:ROWS},()=>Array(COLS).fill(null)); sizedBricks=[];
+  const pal=data.palette||{};
+  for (const b of data.bricks||[]) {
+    const entry=pal[b.k]; if(!entry)continue;
+    const len=b.len||1, w=b.w||1, h=b.h||1;
+    if (w>1||h>1) { let type='brick'; if(entry.steel)type='steel'; else if(entry.multiply)type='multiply'; clearGridUnder(b.r,b.c,w,h); sizedBricks.push({r:b.r,c:b.c,w,h,type,hue:entry.hue||0,count:entry.multiply||0}); continue; }
+    let cell; if(entry.steel)cell={type:'steel'}; else if(entry.multiply)cell={type:'multiply',hue:entry.hue||.83,count:entry.multiply}; else cell={type:'brick',hue:entry.hue||0};
+    if(len>1){for(let dc=0;dc<len;dc++)if(b.r<ROWS&&b.c+dc<COLS)grid[b.r][b.c+dc]={...cell};} else{if(b.r<ROWS&&b.c<COLS)grid[b.r][b.c]={...cell};}
+  }
+  shapes=(data.shapes||[]).map(s=>({v:s.v,hue:s.hue,steel:s.steel,multiply:s.multiply}));
+  document.getElementById('level-name').value=data.name||'Untitled';
+  renderSizedBrickList(); renderPolyVerts(); updateStats(); render();
+}
+
+function clearAll() { if(!confirm('Clear everything?'))return; grid=Array.from({length:ROWS},()=>Array(COLS).fill(null)); shapes=[];sizedBricks=[];polyVerts=[];selection=null; renderSizedBrickList();renderPolyVerts();updateStats();render(); }
+
+renderPolyVerts(); renderShapeList(); renderSizedBrickList(); render();
+
+// Drag and drop import
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#c050c0'; dropZone.style.color = '#c050c0'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#444'; dropZone.style.color = '#555'; });
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.style.borderColor = '#444'; dropZone.style.color = '#555';
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => { try { loadLevel(JSON.parse(ev.target.result)); } catch(err) { alert('Parse error: ' + err.message); } };
+  reader.readAsText(file);
+});
+
+// Paste import
+function importFromPaste() {
+  const text = document.getElementById('json-import').value.trim();
+  if (!text) return;
+  try { loadLevel(JSON.parse(text)); document.getElementById('json-import').value = ''; }
+  catch(err) { alert('Parse error: ' + err.message); }
+}
+</script>
+</body>
+</html>
