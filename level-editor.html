@@ -180,6 +180,33 @@ textarea { background: #222; color: #eee; border: 1px solid #444; padding: 4px; 
     <h3>JSON Output</h3>
     <textarea id="json-output" readonly placeholder="Copy JSON or Save to export..."></textarea>
 
+    <button class="sm" onclick="document.getElementById('shortcuts-modal').style.display='flex'" style="margin-top:12px;width:100%;background:#333">Keyboard Shortcuts</button>
+    <div id="shortcuts-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:999;align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+      <div style="background:#1a1a1a;border:1px solid #555;border-radius:8px;padding:20px;max-width:400px;width:90%;max-height:80vh;overflow-y:auto;color:#ccc;font-size:11px;line-height:1.8">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <b style="font-size:14px;color:#fff">Keyboard Shortcuts</b>
+          <span style="cursor:pointer;font-size:18px;color:#888" onclick="document.getElementById('shortcuts-modal').style.display='none'">&times;</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse">
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>1-7</b></td><td>Brick, Erase, Select, Dropper, Mult, Steel, Poly</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>W / S</b></td><td>Brush height +/-</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>A / D</b></td><td>Brush width +/-</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Q / E</b></td><td>Multiply value -/+</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>, / .</b></td><td>Nudge hue -/+ 0.02</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>R</b></td><td>Rotate (selection or stamp)</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>F</b></td><td>Flip (selection or stamp)</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>X</b></td><td>Toggle X mirror</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Y</b></td><td>Toggle Y mirror (not impl)</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Tab</b></td><td>Toggle sized brick mode</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Del / Bksp</b></td><td>Delete selection</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Arrows</b></td><td>Move selection</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Esc</b></td><td>Clear selection</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Cmd+Z</b></td><td>Undo</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Cmd+Shift+Z</b></td><td>Redo</td></tr>
+        </table>
+      </div>
+    </div>
+
   </div>
 </div>
 
