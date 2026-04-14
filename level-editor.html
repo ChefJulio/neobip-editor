@@ -125,7 +125,7 @@ textarea { background: #222; color: #eee; border: 1px solid #444; padding: 4px; 
 
   <div id="right-panel">
     <h3>Stats</h3>
-    <div class="stat">Bricks: <b id="stat-bricks">0</b> &nbsp; Mult: <b id="stat-mult">0</b> <span style="color:#555">/ ~50</span></div>
+    <div class="stat">Bricks: <b id="stat-bricks">0</b> &nbsp; Steel: <b id="stat-steel">0</b> &nbsp; Mult: <b id="stat-mult">0</b> <span style="color:#555">/ ~50</span></div>
     <div class="stat">Shapes: <b id="stat-shapes">0</b></div>
 
     <h3>File</h3>
@@ -195,12 +195,16 @@ textarea { background: #222; color: #eee; border: 1px solid #444; padding: 4px; 
           <tr><td style="color:#888;padding:2px 8px 2px 0"><b>, / .</b></td><td>Nudge hue -/+ 0.01</td></tr>
           <tr><td style="color:#888;padding:2px 8px 2px 0"><b>R</b></td><td>Rotate (selection or stamp)</td></tr>
           <tr><td style="color:#888;padding:2px 8px 2px 0"><b>F</b></td><td>Flip (selection or stamp)</td></tr>
-          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>X</b></td><td>Toggle X mirror</td></tr>
-          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Y</b></td><td>Toggle Y mirror (not impl)</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>G</b></td><td>Toggle X mirror</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>T</b></td><td>Toggle Y mirror</td></tr>
           <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Tab</b></td><td>Toggle sized brick mode</td></tr>
           <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Del / Bksp</b></td><td>Delete selection</td></tr>
           <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Arrows</b></td><td>Move selection</td></tr>
           <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Esc</b></td><td>Clear selection</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Z / X / C / V</b></td><td>Fill selection: Brick / Erase / Steel / Mult</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Cmd+C</b></td><td>Copy selection</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Cmd+X</b></td><td>Cut selection</td></tr>
+          <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Cmd+V</b></td><td>Paste (stamp at cursor)</td></tr>
           <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Cmd+Z</b></td><td>Undo</td></tr>
           <tr><td style="color:#888;padding:2px 8px 2px 0"><b>Cmd+Shift+Z</b></td><td>Redo</td></tr>
         </table>
@@ -552,6 +556,7 @@ canvas.addEventListener('mouseup', () => { painting = false; selStart = null; la
 canvas.addEventListener('mouseleave', () => { painting = false; hoverPos = null; render(); });
 
 document.addEventListener('keydown', (e) => {
+  if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
   const keys = {1:'brick',2:'erase',3:'select',4:'dropper',5:'multiply',6:'steel',7:'poly'};
   if (keys[e.key]) setTool(keys[e.key]);
   if ((e.key === 'Delete' || e.key === 'Backspace') && selection) { fillSelectionWith('erase'); e.preventDefault(); }
@@ -563,6 +568,9 @@ document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) { undo(); e.preventDefault(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'z' && e.shiftKey) { redo(); e.preventDefault(); }
   if ((e.metaKey || e.ctrlKey) && e.key === 'y') { redo(); e.preventDefault(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'c' && selection) { copySelection(); e.preventDefault(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'x' && selection) { cutSelection(); e.preventDefault(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'v' && clipboard && hoverPos) { saveUndo(); stampAt(hoverPos); updateStats(); render(); e.preventDefault(); }
   if (e.key === 'Tab') { sizedMode = !sizedMode; updateSizedBtn(); e.preventDefault(); }
   if (e.key === 'w' || e.key === 'W') { document.getElementById('brush-h').value = Math.min(ROWS, (parseInt(document.getElementById('brush-h').value)||1) + 1); }
   if (e.key === 's' || e.key === 'S') { document.getElementById('brush-h').value = Math.max(1, (parseInt(document.getElementById('brush-h').value)||1) - 1); }
@@ -573,6 +581,12 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'e' || e.key === 'E') { const sel = document.getElementById('mult-val'); sel.selectedIndex = Math.min(sel.options.length - 1, sel.selectedIndex + 1); }
   if (e.key === 'r' || e.key === 'R') { handleRotate(); e.preventDefault(); }
   if (e.key === 'f' || e.key === 'F') { handleFlip(); e.preventDefault(); }
+  if (e.key === 'g' || e.key === 'G') { mirrorX=!mirrorX; updateMirrorBtns(); e.preventDefault(); }
+  if (e.key === 't' || e.key === 'T') { mirrorY=!mirrorY; updateMirrorBtns(); e.preventDefault(); }
+  if (selection && !e.metaKey && !e.ctrlKey && (e.key === 'z')) { fillSelectionWith('brick'); e.preventDefault(); }
+  if (selection && !e.metaKey && !e.ctrlKey && (e.key === 'x')) { fillSelectionWith('erase'); e.preventDefault(); }
+  if (selection && (e.key === 'c') && !e.metaKey && !e.ctrlKey) { fillSelectionWith('steel'); e.preventDefault(); }
+  if (selection && (e.key === 'v') && !e.metaKey && !e.ctrlKey) { fillSelectionWith('multiply'); e.preventDefault(); }
   if (e.key === ',') { nudgeHue(-0.01); e.preventDefault(); }
   if (e.key === '.') { nudgeHue(0.01); e.preventDefault(); }
 });
@@ -1057,22 +1071,21 @@ function render() {
 
 // --- Stats ---
 function updateStats() {
-  let bricks=0, mult=0;
-  const occupied = new Set();
+  let bricks=0, steel=0, mult=0;
   for (let r=0;r<ROWS;r++) for (let c=0;c<COLS;c++) {
     const cell=grid[r][c];
-    if(cell){ bricks++; occupied.add(r+','+c); if(cell.type==='multiply')mult+=cell.count; }
+    if(!cell) continue;
+    if(cell.type==='steel') steel++;
+    else if(cell.type==='multiply') mult+=cell.count;
+    else bricks++;
   }
   for (const b of sizedBricks) {
-    let count = 0;
-    for (let dr=0;dr<b.h;dr++) for (let dc=0;dc<b.w;dc++) {
-      const key = (b.r+dr)+','+(b.c+dc);
-      if (!occupied.has(key)) { count++; occupied.add(key); }
-    }
-    bricks += count;
-    if(b.type==='multiply') mult+=b.count;
+    if(b.type==='steel') steel++;
+    else if(b.type==='multiply') mult+=b.count;
+    else bricks++;
   }
   document.getElementById('stat-bricks').textContent = bricks;
+  document.getElementById('stat-steel').textContent = steel;
   document.getElementById('stat-mult').textContent = mult;
   document.getElementById('stat-shapes').textContent = shapes.length;
   document.getElementById('stat-shapes2').textContent = shapes.length;
@@ -1125,6 +1138,57 @@ function loadLevel(data) {
 
 function clearAll() { if(!confirm('Clear everything?'))return; grid=Array.from({length:ROWS},()=>Array(COLS).fill(null)); shapes=[];sizedBricks=[];polyVerts=[];selection=null; renderSizedBrickList();renderPolyVerts();updateStats();render(); }
 
+// --- Autosave / Restore ---
+let autosaveTimer = null;
+function scheduleAutosave() {
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem('neobip-editor-state', JSON.stringify({
+        grid, sizedBricks, shapes, hue, recentHues, tool, mirrorX, mirrorY, sizedMode, clipboard, undoStack, redoStack,
+        name: document.getElementById('level-name').value,
+        mirrorXLine: document.getElementById('mirror-x-line').value,
+        mirrorYLine: document.getElementById('mirror-y-line').value,
+        brushW: document.getElementById('brush-w').value,
+        brushH: document.getElementById('brush-h').value,
+        multVal: document.getElementById('mult-val').value,
+      }));
+    } catch(e) {}
+  }, 300);
+}
+function restoreState() {
+  try {
+    const raw = localStorage.getItem('neobip-editor-state');
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (s.grid && s.grid.length === ROWS && s.grid[0].length === COLS) grid = s.grid;
+    if (s.sizedBricks) sizedBricks = s.sizedBricks;
+    if (s.shapes) shapes = s.shapes;
+    if (s.hue != null) { hue = s.hue; document.getElementById('hue-slider').value = hue; document.getElementById('hue-val').textContent = hue.toFixed(2); }
+    if (s.tool) { tool = s.tool; setTool(tool); }
+    if (s.recentHues) { recentHues = s.recentHues; buildRecentColors(); }
+    if (s.clipboard) { clipboard = s.clipboard; }
+    if (s.undoStack) { undoStack = s.undoStack; }
+    if (s.redoStack) { redoStack = s.redoStack; }
+    if (s.mirrorX != null) { mirrorX = s.mirrorX; }
+    if (s.mirrorY != null) { mirrorY = s.mirrorY; }
+    if (s.sizedMode != null) { sizedMode = s.sizedMode; updateSizedBtn(); }
+    if (s.name) document.getElementById('level-name').value = s.name;
+    if (s.mirrorXLine) document.getElementById('mirror-x-line').value = s.mirrorXLine;
+    if (s.mirrorYLine) document.getElementById('mirror-y-line').value = s.mirrorYLine;
+    if (s.brushW) document.getElementById('brush-w').value = s.brushW;
+    if (s.brushH) document.getElementById('brush-h').value = s.brushH;
+    if (s.multVal) document.getElementById('mult-val').value = s.multVal;
+    updateMirrorBtns(); updateBrushDisplay();
+    return true;
+  } catch(e) { return false; }
+}
+
+// Hook autosave into render — called after every state change
+const _origRender = render;
+render = function() { _origRender(); scheduleAutosave(); };
+
+restoreState();
 renderPolyVerts(); renderShapeList(); renderSizedBrickList(); render();
 
 // Drag and drop import
