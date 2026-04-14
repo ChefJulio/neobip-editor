@@ -1136,7 +1136,7 @@ function loadLevel(data) {
   renderSizedBrickList(); renderPolyVerts(); updateStats(); render();
 }
 
-function clearAll() { if(!confirm('Clear everything?'))return; grid=Array.from({length:ROWS},()=>Array(COLS).fill(null)); shapes=[];sizedBricks=[];polyVerts=[];selection=null; renderSizedBrickList();renderPolyVerts();updateStats();render(); }
+function clearAll() { if(!confirm('Clear everything?'))return; grid=Array.from({length:ROWS},()=>Array(COLS).fill(null)); shapes=[];sizedBricks=[];polyVerts=[];selection=null;clipboard=null;undoStack=[];redoStack=[];recentHues=[];document.getElementById('level-name').value='Untitled'; buildRecentColors();renderSizedBrickList();renderPolyVerts();updateStats();render(); }
 
 // --- Autosave / Restore ---
 let autosaveTimer = null;
