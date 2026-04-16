@@ -608,7 +608,23 @@ function copySelection() {
     }
     cells.push(row);
   }
-  clipboard = { w, h, cells };
+  // Capture sized bricks fully contained in the selection (relative coords)
+  const sized = sizedBricks
+    .filter(b => b.c >= selection.c1 && b.c + b.w - 1 <= selection.c2
+              && b.r >= selection.r1 && b.r + b.h - 1 <= selection.r2)
+    .map(b => ({ r: b.r - selection.r1, c: b.c - selection.c1,
+                 w: b.w, h: b.h, type: b.type, hue: b.hue, count: b.count }));
+  // Capture polygons fully contained in the selection (vertex coords are
+  // continuous; selection r1..r2/c1..c2 covers cell rect [c1..c2+1, r1..r2+1])
+  const polys = shapes
+    .filter(s => s.v.every(v =>
+      v[0] >= selection.c1 && v[0] <= selection.c2 + 1 &&
+      v[1] >= selection.r1 && v[1] <= selection.r2 + 1))
+    .map(s => ({
+      v: s.v.map(v => [v[0] - selection.c1, v[1] - selection.r1]),
+      hue: s.hue, steel: s.steel, multiply: s.multiply
+    }));
+  clipboard = { w, h, cells, sized, polys };
   setTool('stamp');
 }
 
@@ -642,6 +658,18 @@ function recolorClipboard() {
 function flipClipboard() {
   if (!clipboard) return;
   for (const row of clipboard.cells) row.reverse();
+  // Mirror sized brick positions horizontally within the clipboard width
+  if (clipboard.sized) {
+    for (const sb of clipboard.sized) {
+      sb.c = clipboard.w - sb.c - sb.w;
+    }
+  }
+  // Mirror polygon vertices and reverse winding so fills stay valid
+  if (clipboard.polys) {
+    for (const p of clipboard.polys) {
+      p.v = p.v.map(v => [clipboard.w - v[0], v[1]]).reverse();
+    }
+  }
   render();
 }
 
@@ -656,7 +684,31 @@ function rotateClipboard() {
     }
     newCells.push(row);
   }
-  clipboard = { w: oldH, h: oldW, cells: newCells };
+  // Sized brick rotation (matches the cell rotation above).
+  let newSized = clipboard.sized;
+  if (newSized) {
+    newSized = newSized.map(sb => ({
+      r: sb.c,
+      c: oldH - sb.r - sb.h,
+      w: sb.h,
+      h: sb.w,
+      type: sb.type,
+      hue: sb.hue,
+      count: sb.count
+    }));
+  }
+  // Polygon vertex rotation: (x, y) → (oldH - y, x). Same direction as the
+  // cell/brick rotation above. Winding order is preserved by this transform.
+  let newPolys = clipboard.polys;
+  if (newPolys) {
+    newPolys = newPolys.map(p => ({
+      v: p.v.map(v => [oldH - v[1], v[0]]),
+      hue: p.hue,
+      steel: p.steel,
+      multiply: p.multiply
+    }));
+  }
+  clipboard = { w: oldH, h: oldW, cells: newCells, sized: newSized, polys: newPolys };
   render();
 }
 
@@ -733,6 +785,34 @@ function stampAt(pos) {
       }
     }
   }
+  // Re-emit any sized bricks captured at copy time
+  if (clipboard.sized) {
+    for (const sb of clipboard.sized) {
+      const nr = pos.r + sb.r, nc = pos.c + sb.c;
+      if (nr + sb.h > ROWS || nc + sb.w > COLS) continue;
+      // Clear underlying grid cells covered by the sized brick
+      for (let dr = 0; dr < sb.h; dr++) {
+        for (let dc = 0; dc < sb.w; dc++) {
+          if (nr + dr < ROWS && nc + dc < COLS) grid[nr + dr][nc + dc] = null;
+        }
+      }
+      // Drop existing sized bricks overlapping the footprint
+      sizedBricks = sizedBricks.filter(b =>
+        b.c + b.w <= nc || b.c >= nc + sb.w ||
+        b.r + b.h <= nr || b.r >= nr + sb.h);
+      sizedBricks.push({ r: nr, c: nc, w: sb.w, h: sb.h,
+                         type: sb.type, hue: sb.hue, count: sb.count });
+    }
+  }
+  // Re-emit any polygons captured at copy time
+  if (clipboard.polys) {
+    for (const p of clipboard.polys) {
+      const newVerts = p.v.map(v => [v[0] + pos.c, v[1] + pos.r]);
+      // Skip polys that would land off-grid
+      if (newVerts.some(v => v[0] < 0 || v[0] > COLS || v[1] < 0 || v[1] > ROWS)) continue;
+      shapes.push({ v: newVerts, hue: p.hue, steel: p.steel, multiply: p.multiply });
+    }
+  }
 }
 
 function cutSelection() {
@@ -748,6 +828,10 @@ function cutSelection() {
     b.c > sel.c2 || b.c + b.w - 1 < sel.c1 ||
     b.r > sel.r2 || b.r + b.h - 1 < sel.r1
   );
+  // Drop polygons that are fully inside the selection (matches copy rule)
+  shapes = shapes.filter(s => !s.v.every(v =>
+    v[0] >= sel.c1 && v[0] <= sel.c2 + 1 &&
+    v[1] >= sel.r1 && v[1] <= sel.r2 + 1));
   updateStats(); render();
 }
 
@@ -807,6 +891,10 @@ function fillSelectionWith(type) {
 
   if (type === 'erase') {
     sizedBricks = sizedBricks.filter(b => b.c > selection.c2 || b.c + b.w - 1 < selection.c1 || b.r > selection.r2 || b.r + b.h - 1 < selection.r1);
+    // Also drop polygons fully inside the selection
+    shapes = shapes.filter(s => !s.v.every(v =>
+      v[0] >= selection.c1 && v[0] <= selection.c2 + 1 &&
+      v[1] >= selection.r1 && v[1] <= selection.r2 + 1));
   }
 
   if (sizedMode && type !== 'erase' && (w > 1 || h > 1)) {
@@ -1047,6 +1135,34 @@ function render() {
           ctx.fillRect(x, y, CELL, CELL);
         }
       }
+      // Preview sized bricks too so 2x2 multipliers are visible at hover
+      if (clipboard.sized) {
+        for (const sb of clipboard.sized) {
+          const x = (hoverPos.c + sb.c) * STEP + GAP;
+          const y = (hoverPos.r + sb.r) * STEP + GAP;
+          const cellLike = { type: sb.type, hue: sb.hue, count: sb.count };
+          ctx.fillStyle = cellColor(cellLike);
+          ctx.fillRect(x, y, sb.w * STEP - GAP, sb.h * STEP - GAP);
+        }
+      }
+      // Preview polygons
+      if (clipboard.polys) {
+        for (const p of clipboard.polys) {
+          ctx.beginPath();
+          for (let i = 0; i < p.v.length; i++) {
+            const x = (hoverPos.c + p.v[i][0]) * STEP;
+            const y = (hoverPos.r + p.v[i][1]) * STEP;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          const polyCellLike = p.steel
+            ? { type: 'steel' }
+            : (p.multiply ? { type: 'multiply', hue: p.hue ?? 0, count: p.multiply }
+                          : { type: 'brick', hue: p.hue ?? 0 });
+          ctx.fillStyle = cellColor(polyCellLike);
+          ctx.fill();
+        }
+      }
       ctx.globalAlpha = 1;
       ctx.strokeStyle = 'rgba(0,255,170,0.6)';
       ctx.lineWidth = 2;
@@ -1111,10 +1227,10 @@ function buildJSON() {
   const bricks=[];
   for (let r=0;r<ROWS;r++) { let c=0; while(c<COLS) { const cell=grid[r][c]; if(!cell){c++;continue;} const sig=cellSig(cell); const k=cellToKey.get(sig); let len=1; while(c+len<COLS&&grid[r][c+len]&&cellSig(grid[r][c+len])===sig)len++; const entry={r,c,k}; if(len>1)entry.len=len; bricks.push(entry); c+=len; } }
   for (const b of sizedBricks) {
-    let k; if(b.type==='steel'){if(!palette['S'])palette['S']={steel:true};k='S';} else if(b.type==='multiply'){const sig=`mult_${b.count}_${(b.hue||.83).toFixed(2)}`;if(!cellToKey.has(sig)){const mk='M'+cellToKey.size;cellToKey.set(sig,mk);palette[mk]={hue:parseFloat((b.hue||.83).toFixed(2)),multiply:b.count};}k=cellToKey.get(sig);} else{const sig=`brick_${(b.hue||0).toFixed(2)}`;if(!cellToKey.has(sig)){const bk=keyChars[keyIdx++]||('k'+keyIdx++);cellToKey.set(sig,bk);palette[bk]={hue:parseFloat((b.hue||0).toFixed(2))};}k=cellToKey.get(sig);}
+    let k; if(b.type==='steel'){if(!palette['S'])palette['S']={steel:true};k='S';} else if(b.type==='multiply'){const sig=`mult_${b.count}_${(b.hue ?? .83).toFixed(2)}`;if(!cellToKey.has(sig)){const mk='M'+cellToKey.size;cellToKey.set(sig,mk);palette[mk]={hue:parseFloat((b.hue ?? .83).toFixed(2)),multiply:b.count};}k=cellToKey.get(sig);} else{const sig=`brick_${(b.hue ?? 0).toFixed(2)}`;if(!cellToKey.has(sig)){const bk=keyChars[keyIdx++]||('k'+keyIdx++);cellToKey.set(sig,bk);palette[bk]={hue:parseFloat((b.hue ?? 0).toFixed(2))};}k=cellToKey.get(sig);}
     bricks.push({r:b.r,c:b.c,w:b.w,h:b.h,k});
   }
-  const shapesOut=shapes.map(s=>{const o={v:s.v};if(s.steel)o.steel=true;else o.hue=parseFloat((s.hue||.5).toFixed(2));if(s.multiply)o.multiply=s.multiply;return o;});
+  const shapesOut=shapes.map(s=>{const o={v:s.v};if(s.steel)o.steel=true;else o.hue=parseFloat((s.hue ?? .5).toFixed(2));if(s.multiply)o.multiply=s.multiply;return o;});
   return JSON.stringify({name,palette,bricks,shapes:shapesOut},null,2);
 }
 
@@ -1128,8 +1244,8 @@ function loadLevel(data) {
   for (const b of data.bricks||[]) {
     const entry=pal[b.k]; if(!entry)continue;
     const len=b.len||1, w=b.w||1, h=b.h||1;
-    if (w>1||h>1) { let type='brick'; if(entry.steel)type='steel'; else if(entry.multiply)type='multiply'; clearGridUnder(b.r,b.c,w,h); sizedBricks.push({r:b.r,c:b.c,w,h,type,hue:entry.hue||0,count:entry.multiply||0}); continue; }
-    let cell; if(entry.steel)cell={type:'steel'}; else if(entry.multiply)cell={type:'multiply',hue:entry.hue||.83,count:entry.multiply}; else cell={type:'brick',hue:entry.hue||0};
+    if (w>1||h>1) { let type='brick'; if(entry.steel)type='steel'; else if(entry.multiply)type='multiply'; clearGridUnder(b.r,b.c,w,h); sizedBricks.push({r:b.r,c:b.c,w,h,type,hue:entry.hue ?? 0,count:entry.multiply||0}); continue; }
+    let cell; if(entry.steel)cell={type:'steel'}; else if(entry.multiply)cell={type:'multiply',hue:entry.hue ?? .83,count:entry.multiply}; else cell={type:'brick',hue:entry.hue ?? 0};
     if(len>1){for(let dc=0;dc<len;dc++)if(b.r<ROWS&&b.c+dc<COLS)grid[b.r][b.c+dc]={...cell};} else{if(b.r<ROWS&&b.c<COLS)grid[b.r][b.c]={...cell};}
   }
   shapes=(data.shapes||[]).map(s=>({v:s.v,hue:s.hue,steel:s.steel,multiply:s.multiply}));
