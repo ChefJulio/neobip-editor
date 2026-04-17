@@ -1055,7 +1055,7 @@ function render() {
     const cell = grid[r][c]; if (!cell) continue;
     ctx.fillStyle = cellColor(cell);
     ctx.fillRect(c*STEP+GAP, r*STEP+GAP, CELL, CELL);
-    if (cell.type === 'multiply') { ctx.fillStyle='#fff'; ctx.font='bold 8px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('x'+cell.count, c*STEP+GAP+CELL/2, r*STEP+GAP+CELL/2); }
+    if (cell.type === 'multiply') { ctx.font='bold 8px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineWidth=2.5; ctx.strokeStyle='#000'; ctx.strokeText('x'+cell.count, c*STEP+GAP+CELL/2, r*STEP+GAP+CELL/2); ctx.fillStyle='#fff'; ctx.fillText('x'+cell.count, c*STEP+GAP+CELL/2, r*STEP+GAP+CELL/2); }
     if (cell.type === 'steel') { ctx.strokeStyle='#999'; ctx.lineWidth=1; ctx.strokeRect(c*STEP+GAP+.5, r*STEP+GAP+.5, CELL-1, CELL-1); }
   }
 
@@ -1065,7 +1065,7 @@ function render() {
     ctx.fillStyle = b.type==='steel'?'#666':hueCSS(b.hue);
     ctx.fillRect(x,y,w,h);
     ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.strokeRect(x+.5,y+.5,w-1,h-1);
-    if (b.type!=='brick') { ctx.fillStyle='#fff'; ctx.font='bold 10px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(b.type==='steel'?'S':'x'+b.count, x+w/2, y+h/2); }
+    if (b.type!=='brick') { const lbl=b.type==='steel'?'S':'x'+b.count; ctx.font='bold 10px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineWidth=3; ctx.strokeStyle='#000'; ctx.strokeText(lbl, x+w/2, y+h/2); ctx.fillStyle='#fff'; ctx.fillText(lbl, x+w/2, y+h/2); }
   }
 
   // Shapes
